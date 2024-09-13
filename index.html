@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>贪吃蛇</title>
+    <style>
+        body {
+            background-color: #111;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            text-align: center;
+        }
+
+        #gameCanvas {
+            background-color: #000;
+            display: block;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 48px;
+            margin-top: 20px;
+        }
+
+        p {
+            font-size: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>贵物贪吃蛇 V2</h1>
+    <p>按 SPACE 开始游戏。使用 WASD 控制蛇的移动。达到10分获胜。</p>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const cellSize = 20;
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const cols = canvasWidth / cellSize;
+        const rows = canvasHeight / cellSize;
+
+        let snake = [];
+        let direction = null;
+        let apple = null;
+        let obstacles = [];
+        let score = 0;
+        let gameOver = false;
+        let gameWin = false;
+        let gameStarted = false;
+        let gameLoop;
+
+        // 无敌状态变量
+        let invincible = false;
+        let invincibleStartTime = null; // 记录无敌状态开始的时间
+
+        // 作弊码检测变量
+        let cheatCode = ['g', 'u', 'i', 'w', 'u'];
+        let cheatCodeIndex = 0;
+
+        document.addEventListener('keydown', keyDownHandler);
+
+        function keyDownHandler(e) {
+            if (!gameStarted && e.code === 'Space') {
+                e.preventDefault();
+                startGame();
+            } else if (gameStarted) {
+                changeDirection(e);
+                checkCheatCode(e); // 检查作弊码
+            }
+        }
+
+        function startGame() {
+            gameStarted = true;
+            gameOver = false;
+            gameWin = false; // 重置 gameWin 状态
+            score = 0;
+            direction = getRandomDirection();
+            snake = [];
+            const startX = Math.floor(cols / 2);
+            const startY = Math.floor(rows / 2);
+            snake.push({ x: startX, y: startY });
+
+            // 初始化无敌状态
+            invincible = true;
+            invincibleStartTime = Date.now(); // 记录无敌状态开始时间
+
+            // 重置作弊码索引
+            cheatCodeIndex = 0;
+
+            placeApple();
+            placeObstacles();
+
+            if (gameLoop) {
+                clearInterval(gameLoop);
+            }
+            gameLoop = setInterval(gameTick, 100);
+        }
+
+        function getRandomDirection() {
+            const directions = ['left', 'up', 'right', 'down'];
+            return directions[Math.floor(Math.random() * directions.length)];
+        }
+
+        function changeDirection(e) {
+            const key = e.key.toLowerCase();
+
+            // 防止快速按键掉头，增加对相反方向的限制
+            if (['w', 'a', 's', 'd'].includes(key)) {
+                e.preventDefault();
+            }
+
+            if (key === 'w' && direction !== 'down') {
+                direction = 'up';
+            } else if (key === 's' && direction !== 'up') {
+                direction = 'down';
+            } else if (key === 'a' && direction !== 'right') {
+                direction = 'left';
+            } else if (key === 'd' && direction !== 'left') {
+                direction = 'right';
+            }
+        }
+
+        // 检查作弊码输入
+        function checkCheatCode(e) {
+            const key = e.key.toLowerCase();
+            if (key === cheatCode[cheatCodeIndex]) {
+                cheatCodeIndex++;
+                if (cheatCodeIndex === cheatCode.length) {
+                    gameWin = true;
+                    gameStarted = false;
+                    clearInterval(gameLoop);
+                    draw();
+                }
+            } else {
+                cheatCodeIndex = 0;
+            }
+        }
+
+        function gameTick() {
+            if (gameOver || gameWin) {
+                clearInterval(gameLoop);
+            }
+
+            // 更新无敌状态
+            if (invincible) {
+                const currentTime = Date.now();
+                if (currentTime - invincibleStartTime >= 1500) { // 1.5秒无敌
+                    invincible = false;
+                }
+            }
+
+            if (!gameOver && !gameWin) {
+                update();
+            }
+
+            draw();
+        }
+
+        function update() {
+            const head = { ...snake[0] };
+
+            if (direction === 'left') {
+                head.x--;
+            } else if (direction === 'right') {
+                head.x++;
+            } else if (direction === 'up') {
+                head.y--;
+            } else if (direction === 'down') {
+                head.y++;
+            }
+
+            if (head.x < 0) {
+                head.x = cols - 1;
+            } else if (head.x >= cols) {
+                head.x = 0;
+            }
+
+            if (head.y < 0) {
+                head.y = rows - 1;
+            } else if (head.y >= rows) {
+                head.y = 0;
+            }
+
+            // 检查是否撞到自己
+            for (let segment of snake) {
+                if (segment.x === head.x && segment.y === head.y) {
+                    gameOver = true;
+                    return;
+                }
+            }
+
+            // 检查是否撞到障碍物
+            if (!invincible) {
+                for (let obstacle of obstacles) {
+                    if (obstacle.x === head.x && obstacle.y === head.y) {
+                        gameOver = true;
+                        return;
+                    }
+                }
+            }
+
+            snake.unshift(head);
+
+            // 检查是否吃到苹果
+            if (head.x === apple.x && head.y === apple.y) {
+                score++;
+
+                // 检查胜利条件
+                if (score >= 10) {
+                    gameWin = true;
+                    return;
+                }
+
+                invincible = true;          // 激活无敌状态
+                invincibleStartTime = Date.now();  // 重置无敌开始时间
+                placeApple();
+                placeObstacles();
+            } else {
+                snake.pop();
+            }
+        }
+
+        function draw() {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+            // 绘制苹果
+            ctx.fillStyle = 'red';
+            ctx.beginPath();
+            ctx.arc(apple.x * cellSize + cellSize / 2, apple.y * cellSize + cellSize / 2, cellSize / 2, 0, 2 * Math.PI);
+            ctx.fill();
+
+            // 绘制障碍物
+            ctx.fillStyle = 'gray';
+            for (let obstacle of obstacles) {
+                ctx.fillRect(obstacle.x * cellSize, obstacle.y * cellSize, cellSize, cellSize);
+            }
+
+            // 绘制蛇
+            const snakeColor = invincible ? 'yellow' : 'lime';
+            for (let segment of snake) {
+                drawRoundedRect(segment.x * cellSize, segment.y * cellSize, cellSize, cellSize, 5, snakeColor);
+            }
+
+            // 显示得分
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Arial';
+            ctx.fillText('得分：' + score, 10, 20);
+
+            // 显示无敌计时器
+            if (invincible) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Arial';
+                ctx.fillText('无敌：' + ((1500 - (Date.now() - invincibleStartTime)) / 1000).toFixed(1) + '秒', canvasWidth - 150, 20);
+            }
+
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '50px Arial';
+                ctx.fillText('游戏结束', canvasWidth / 2 - 100, canvasHeight / 2);
+                ctx.font = '20px Arial';
+                ctx.fillText('按 SPACE 重新开始', canvasWidth / 2 - 100, canvasHeight / 2 + 30);
+                gameStarted = false;
+            }
+
+            // 显示胜利信息
+            if (gameWin) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+                ctx.fillStyle = '#fff';
+                ctx.font = '50px Arial';
+                ctx.fillText('你赢了！', canvasWidth / 2 - 110, canvasHeight / 2 - 20);
+                ctx.font = '30px Arial';
+                ctx.fillText('🎉 恭喜你！🎉', canvasWidth / 2 - 110, canvasHeight / 2 + 30);
+                ctx.font = '20px Arial';
+                ctx.fillText('按 SPACE 再玩一次', canvasWidth / 2 - 110, canvasHeight / 2 + 60);
+                gameStarted = false;
+            }
+        }
+
+        function drawRoundedRect(x, y, width, height, radius, fillColor) {
+            ctx.fillStyle = fillColor;
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.fill();
+        }
+
+        function placeApple() {
+            let validPosition = false;
+            while (!validPosition) {
+                const x = Math.floor(Math.random() * cols);
+                const y = Math.floor(Math.random() * rows);
+                validPosition = true;
+
+                for (let segment of snake) {
+                    if (segment.x === x && segment.y === y) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+
+                for (let obstacle of obstacles) {
+                    if (obstacle.x === x && obstacle.y === y) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+
+                if (validPosition) {
+                    apple = { x: x, y: y };
+                }
+            }
+        }
+
+        function placeObstacles() {
+            // 动态调整障碍物数量，可以根据得分或游戏难度逐渐增加障碍物数量
+            const numObstacles = Math.floor((cols * rows) / 17) + Math.floor(score / 2); // 随着分数增加，增加障碍物数量
+            obstacles = [];
+            let positions = [];
+
+            // 预先生成所有可能的位置
+            for (let x = 0; x < cols; x++) {
+                for (let y = 0; y < rows; y++) {
+                    positions.push({ x: x, y: y });
+                }
+            }
+
+            // 排除蛇的位置
+            positions = positions.filter(pos => {
+                return !snake.some(segment => segment.x === pos.x && segment.y === pos.y);
+            });
+
+            // 排除苹果的位置
+            positions = positions.filter(pos => pos.x !== apple.x || pos.y !== apple.y);
+
+            // 生成障碍物
+            for (let i = 0; i < numObstacles; i++) {
+                if (positions.length === 0) break;
+                const index = Math.floor(Math.random() * positions.length);
+                const obstaclePos = positions.splice(index, 1)[0];
+                obstacles.push(obstaclePos);
+            }
+        }
+
+    </script>
+</body>
+
+</html>
