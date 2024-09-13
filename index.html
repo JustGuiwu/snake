@@ -25,6 +25,10 @@
         p {
             font-size: 20px;
         }
+
+        #volumeControl {
+            margin-top: 20px;
+        }
     </style>
 </head>
 
@@ -32,6 +36,17 @@
     <h1>贵物贪吃蛇 V2</h1>
     <p>按 SPACE 开始游戏。使用 WASD 控制蛇的移动。达到10分获胜。</p>
     <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <!-- 添加背景音乐 -->
+    <audio id="backgroundMusic" loop>
+        <source src="background-music.mp3" type="audio/mp3">
+        您的浏览器不支持音频标签。
+    </audio>
+
+    <!-- 音量控制 -->
+    <label for="volumeControl">调整音量：</label>
+    <input id="volumeControl" type="range" min="0" max="1" step="0.01" value="0.5">
+
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -51,6 +66,7 @@
         let gameWin = false;
         let gameStarted = false;
         let gameLoop;
+        let musicStarted = false; // 确保音乐只在首次播放
 
         // 无敌状态变量
         let invincible = false;
@@ -59,6 +75,20 @@
         // 作弊码检测变量
         let cheatCode = ['g', 'u', 'i', 'w', 'u'];
         let cheatCodeIndex = 0;
+
+        // 获取背景音乐元素
+        const backgroundMusic = document.getElementById('backgroundMusic');
+        const volumeControl = document.getElementById('volumeControl');  // 获取音量调节器
+
+        // 当页面加载时，设置音量和监听音量滑动条的变化
+        window.onload = function () {
+            backgroundMusic.volume = 0.5;
+
+            // 监听音量滑动条的变化
+            volumeControl.addEventListener('input', function () {
+                backgroundMusic.volume = volumeControl.value;
+            });
+        };
 
         document.addEventListener('keydown', keyDownHandler);
 
@@ -75,13 +105,21 @@
         function startGame() {
             gameStarted = true;
             gameOver = false;
-            gameWin = false; // 重置 gameWin 状态
+            gameWin = false;
             score = 0;
             direction = getRandomDirection();
             snake = [];
             const startX = Math.floor(cols / 2);
             const startY = Math.floor(rows / 2);
             snake.push({ x: startX, y: startY });
+
+            // 只在首次按下 Space 时播放音乐
+            if (!musicStarted) {
+                backgroundMusic.play().catch(error => {
+                    console.log("无法播放音乐: ", error);
+                });
+                musicStarted = true;  // 确保之后不再重复播放
+            }
 
             // 初始化无敌状态
             invincible = true;
@@ -107,11 +145,6 @@
         function changeDirection(e) {
             const key = e.key.toLowerCase();
 
-            // 防止快速按键掉头，增加对相反方向的限制
-            if (['w', 'a', 's', 'd'].includes(key)) {
-                e.preventDefault();
-            }
-
             if (key === 'w' && direction !== 'down') {
                 direction = 'up';
             } else if (key === 's' && direction !== 'up') {
@@ -123,7 +156,6 @@
             }
         }
 
-        // 检查作弊码输入
         function checkCheatCode(e) {
             const key = e.key.toLowerCase();
             if (key === cheatCode[cheatCodeIndex]) {
@@ -144,10 +176,9 @@
                 clearInterval(gameLoop);
             }
 
-            // 更新无敌状态
             if (invincible) {
                 const currentTime = Date.now();
-                if (currentTime - invincibleStartTime >= 1500) { // 1.5秒无敌
+                if (currentTime - invincibleStartTime >= 1500) {
                     invincible = false;
                 }
             }
@@ -184,7 +215,6 @@
                 head.y = 0;
             }
 
-            // 检查是否撞到自己
             for (let segment of snake) {
                 if (segment.x === head.x && segment.y === head.y) {
                     gameOver = true;
@@ -192,7 +222,6 @@
                 }
             }
 
-            // 检查是否撞到障碍物
             if (!invincible) {
                 for (let obstacle of obstacles) {
                     if (obstacle.x === head.x && obstacle.y === head.y) {
@@ -204,18 +233,15 @@
 
             snake.unshift(head);
 
-            // 检查是否吃到苹果
             if (head.x === apple.x && head.y === apple.y) {
                 score++;
-
-                // 检查胜利条件
                 if (score >= 10) {
                     gameWin = true;
                     return;
                 }
 
-                invincible = true;          // 激活无敌状态
-                invincibleStartTime = Date.now();  // 重置无敌开始时间
+                invincible = true;
+                invincibleStartTime = Date.now();
                 placeApple();
                 placeObstacles();
             } else {
@@ -227,30 +253,25 @@
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-            // 绘制苹果
             ctx.fillStyle = 'red';
             ctx.beginPath();
             ctx.arc(apple.x * cellSize + cellSize / 2, apple.y * cellSize + cellSize / 2, cellSize / 2, 0, 2 * Math.PI);
             ctx.fill();
 
-            // 绘制障碍物
             ctx.fillStyle = 'gray';
             for (let obstacle of obstacles) {
                 ctx.fillRect(obstacle.x * cellSize, obstacle.y * cellSize, cellSize, cellSize);
             }
 
-            // 绘制蛇
             const snakeColor = invincible ? 'yellow' : 'lime';
             for (let segment of snake) {
                 drawRoundedRect(segment.x * cellSize, segment.y * cellSize, cellSize, cellSize, 5, snakeColor);
             }
 
-            // 显示得分
             ctx.fillStyle = '#fff';
             ctx.font = '20px Arial';
             ctx.fillText('得分：' + score, 10, 20);
 
-            // 显示无敌计时器
             if (invincible) {
                 ctx.fillStyle = '#fff';
                 ctx.font = '20px Arial';
@@ -269,7 +290,6 @@
                 gameStarted = false;
             }
 
-            // 显示胜利信息
             if (gameWin) {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
                 ctx.fillRect(0, 0, canvasWidth, canvasHeight);
@@ -328,27 +348,22 @@
         }
 
         function placeObstacles() {
-            // 动态调整障碍物数量，可以根据得分或游戏难度逐渐增加障碍物数量
-            const numObstacles = Math.floor((cols * rows) / 17) + Math.floor(score / 2); // 随着分数增加，增加障碍物数量
+            const numObstacles = Math.floor((cols * rows) / 17) + Math.floor(score / 2);
             obstacles = [];
             let positions = [];
 
-            // 预先生成所有可能的位置
             for (let x = 0; x < cols; x++) {
                 for (let y = 0; y < rows; y++) {
                     positions.push({ x: x, y: y });
                 }
             }
 
-            // 排除蛇的位置
             positions = positions.filter(pos => {
                 return !snake.some(segment => segment.x === pos.x && segment.y === pos.y);
             });
 
-            // 排除苹果的位置
             positions = positions.filter(pos => pos.x !== apple.x || pos.y !== apple.y);
 
-            // 生成障碍物
             for (let i = 0; i < numObstacles; i++) {
                 if (positions.length === 0) break;
                 const index = Math.floor(Math.random() * positions.length);
@@ -356,7 +371,6 @@
                 obstacles.push(obstaclePos);
             }
         }
-
     </script>
 </body>
 
